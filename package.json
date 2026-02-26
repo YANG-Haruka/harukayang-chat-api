@@ -1,0 +1,8 @@
+{
+  "name": "harukayang-chat-api",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "index": "node scripts/index-data.js"
+  }
+}
