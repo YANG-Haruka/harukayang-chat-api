@@ -7,7 +7,7 @@ module.exports = async function handler(req, res) {
     if (req.method === 'OPTIONS') return res.status(200).end();
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    const { message } = req.body;
+    const { contact, message } = req.body;
     if (!message || !message.trim()) {
         return res.status(400).json({ error: 'message is required' });
     }
@@ -34,7 +34,8 @@ module.exports = async function handler(req, res) {
                 html: `
                     <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;">
                         <h2 style="color:#4fc3f7;border-bottom:1px solid #eee;padding-bottom:10px;">📬 新的网站留言</h2>
-                        <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin:16px 0;white-space:pre-wrap;line-height:1.6;">${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                        ${contact ? `<div style="background:#e3f2fd;border-radius:8px;padding:12px 16px;margin:16px 0;line-height:1.6;"><strong>联系方式：</strong>${contact.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>` : ''}
+                        <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin:16px 0;white-space:pre-wrap;line-height:1.6;"><strong>留言内容：</strong><br>${message.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
                         <div style="color:#999;font-size:12px;margin-top:20px;">
                             <p>时间：${now}（东京时间）</p>
                             <p>UA：${ua}</p>
