@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// Load static knowledge files (persona, contact, projects)
+// Load static knowledge files
 function loadKnowledge() {
     const dir = path.join(__dirname, '..', 'knowledge');
     const files = fs.readdirSync(dir).filter(f => f.endsWith('.txt'));
@@ -44,12 +44,10 @@ async function queryRAG(message) {
 
         if (results.length === 0) return '';
 
-        const context = results
+        return results
             .filter(r => r.score > 0.5)
             .map(r => r.data)
             .join('\n\n');
-
-        return context;
     } catch (err) {
         console.error('RAG query error:', err);
         return '';
@@ -73,11 +71,12 @@ function buildSystemPrompt(ragContext) {
 }
 
 module.exports = async function handler(req, res) {
-    // CORS preflight
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
     if (req.method === 'OPTIONS') {
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
         return res.status(200).end();
     }
 
@@ -90,6 +89,12 @@ module.exports = async function handler(req, res) {
         return res.status(400).json({ error: 'message is required' });
     }
 
+    // Check env vars
+    if (!process.env.DEEPSEEK_API_KEY) {
+        console.error('DEEPSEEK_API_KEY not set');
+        return res.status(500).json({ error: 'Server config error' });
+    }
+
     // RAG: retrieve relevant chat examples
     const ragContext = await queryRAG(message);
 
@@ -98,7 +103,6 @@ module.exports = async function handler(req, res) {
         { role: 'system', content: buildSystemPrompt(ragContext) }
     ];
 
-    // Append conversation history
     if (Array.isArray(history)) {
         const recent = history.slice(-10);
         for (const h of recent) {
@@ -125,32 +129,30 @@ module.exports = async function handler(req, res) {
         });
 
         if (!response.ok) {
-            const err = await response.text();
-            console.error('DeepSeek API error:', err);
-            return res.status(502).json({ error: 'AI service error' });
+            const errText = await response.text();
+            console.error('DeepSeek error:', response.status, errText);
+            return res.status(502).json({ error: 'AI service error', detail: errText });
         }
 
-        // Stream SSE to client
+        // Stream SSE to client using Node.js compatible approach
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) {
-                res.write('data: [DONE]\n\n');
-                break;
-            }
-            res.write(decoder.decode(value, { stream: true }));
+        // Use async iteration on the response body (Node.js ReadableStream)
+        for await (const chunk of response.body) {
+            const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
+            res.write(text);
         }
 
+        res.write('data: [DONE]\n\n');
         res.end();
     } catch (err) {
-        console.error('Chat error:', err);
-        res.status(500).json({ error: 'Internal server error' });
+        console.error('Chat error:', err.message || err);
+        if (!res.headersSent) {
+            res.status(500).json({ error: 'Internal server error' });
+        } else {
+            res.end();
+        }
     }
 };
