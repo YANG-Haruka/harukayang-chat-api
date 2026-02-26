@@ -15,6 +15,33 @@ function loadKnowledge() {
 
 const knowledgeText = loadKnowledge();
 
+// Save chat round to Upstash Redis
+async function saveChatLog(sessionId, userMsg, botReply) {
+    const url = process.env.UPSTASH_REDIS_URL;
+    const token = process.env.UPSTASH_REDIS_TOKEN;
+    if (!url || !token || !sessionId) return;
+
+    const ts = Date.now();
+    const key = `chat:${sessionId}`;
+    try {
+        await fetch(`${url}/pipeline`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify([
+                ['RPUSH', key, JSON.stringify({ role: 'user', content: userMsg, ts })],
+                ['RPUSH', key, JSON.stringify({ role: 'assistant', content: botReply, ts })],
+                ['ZADD', 'chat:sessions', ts, sessionId],
+                ['PERSIST', key]  // keep forever
+            ])
+        });
+    } catch (err) {
+        console.error('Redis log error:', err);
+    }
+}
+
 // Query Upstash Vector for relevant chat examples
 async function queryRAG(message) {
     const url = process.env.UPSTASH_VECTOR_URL;
@@ -84,7 +111,7 @@ module.exports = async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
-    const { message, history } = req.body;
+    const { message, history, sessionId } = req.body;
     if (!message) {
         return res.status(400).json({ error: 'message is required' });
     }
@@ -139,14 +166,34 @@ module.exports = async function handler(req, res) {
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
 
-        // Use async iteration on the response body (Node.js ReadableStream)
+        // Forward chunks to client while capturing full reply
+        let fullReply = '';
         for await (const chunk of response.body) {
             const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf-8');
             res.write(text);
+
+            // Parse SSE to capture reply text
+            const lines = text.split('\n');
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data:')) continue;
+                const dataStr = trimmed.slice(5).trim();
+                if (dataStr === '[DONE]') continue;
+                try {
+                    const data = JSON.parse(dataStr);
+                    const delta = data.choices && data.choices[0] && data.choices[0].delta;
+                    if (delta && delta.content) fullReply += delta.content;
+                } catch (e) {}
+            }
         }
 
         res.write('data: [DONE]\n\n');
         res.end();
+
+        // Save chat log to Redis (non-blocking, after response)
+        if (fullReply) {
+            saveChatLog(sessionId, message, fullReply).catch(() => {});
+        }
     } catch (err) {
         console.error('Chat error:', err.message || err);
         if (!res.headersSent) {
