@@ -188,12 +188,13 @@ module.exports = async function handler(req, res) {
         }
 
         res.write('data: [DONE]\n\n');
-        res.end();
 
-        // Save chat log to Redis (non-blocking, after response)
+        // Save chat log to Redis before ending response
         if (fullReply) {
-            saveChatLog(sessionId, message, fullReply).catch(() => {});
+            await saveChatLog(sessionId, message, fullReply);
         }
+
+        res.end();
     } catch (err) {
         console.error('Chat error:', err.message || err);
         if (!res.headersSent) {

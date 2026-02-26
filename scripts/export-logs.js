@@ -10,10 +10,12 @@
 
 const https = require('https');
 const fs = require('fs');
+const path = require('path');
 
 const API_BASE = process.argv[2];
 const SECRET = process.argv[3];
-const OUTPUT = process.argv[4] || `chat-logs-${new Date().toISOString().slice(0, 10)}.json`;
+const LOGS_DIR = path.join(__dirname, '..', 'logs');
+const OUTPUT = process.argv[4] || path.join(LOGS_DIR, `chat-logs-${new Date().toISOString().slice(0, 10)}.json`);
 
 if (!API_BASE || !SECRET) {
     console.error('Usage: node scripts/export-logs.js <API_BASE> <LOGS_SECRET> [output_file]');
