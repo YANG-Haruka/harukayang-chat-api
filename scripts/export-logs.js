@@ -58,6 +58,9 @@ async function main() {
         process.stdout.write(`  ${allLogs.length}/${list.sessions.length}\r`);
     }
 
+    if (!fs.existsSync(path.dirname(OUTPUT))) {
+        fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
+    }
     fs.writeFileSync(OUTPUT, JSON.stringify(allLogs, null, 2), 'utf-8');
     console.log(`\nExported ${allLogs.length} sessions to ${OUTPUT}`);
 
