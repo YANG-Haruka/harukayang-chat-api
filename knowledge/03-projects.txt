@@ -2,7 +2,8 @@
 
 ### LinguaHaru
 开源AI文档翻译工具，支持多种文件格式的智能翻译。
-GitHub: github.com/YANG-Haruka/LinguaHaru
+GitHub: github.com/YANG-Haruka/LinguaHar
+在线体验：https://huggingface.co/spaces/YANG-Haruka/LinguaHaru
 
 ### HaruWine
 AI鸡尾酒推荐助手，可以根据口味偏好推荐鸡尾酒配方。
